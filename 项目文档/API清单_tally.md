@@ -188,3 +188,56 @@ e_dist = openmc.stats.Discrete([14.1e6], [1.0])     # 例子：D-T 聚变中子�
 
 得到的东西和 `Tabular(...)` 一样，是一个能量分布，交给 `IndependentSource` 的 `energy=`。
 两个参数一般写成列表。只有一个数时直接写 `Discrete(14.1e6, 1.0)` 也行（0.15.3 源码里单个数会被自动包成列表），但写成列表更清楚，和多个能量的写法一样。
+
+---
+
+## 11. （10/15 补）真问题 tally 要用的新用法（规则 13，例子都和项目无关）
+
+**① 列表里放元组，for 一次拆出几个值**
+```python
+FRUITS = [("apple", ["red", "green"], 3.7), ("kiwi", [], 2.4)]
+for name, colors, price in FRUITS:
+    print(name, len(colors), price)
+# apple 2 3.7
+# kiwi 0 2.4
+```
+圆括号括起来的是一个「元组」；元组之间要有逗号（少了会报 `'tuple' object is not callable`）。`for` 后面写几个名字就拆成几个，个数要对上。
+
+**② tally 选核素：`.nuclides`**
+```python
+t = openmc.Tally(name="fuel fission")
+t.nuclides = ["U235", "U238"]     # 列表，里面是字符串
+```
+名字要和材料里 `add_nuclide` 的一模一样。**不设 = 整个材料一起算**（通量、(n,γ) 要的就是这个）。
+
+**③ 这次新用的 4 个 score**（字符串原样写）
+
+| score | 是什么 | 单位（网格一格、每源粒子） |
+|---|---|---|
+| `'(n,a)'` | 放出 α 的反应次数 | 次 |
+| `'(n,p)'` | 放出质子的反应次数 | 次 |
+| `'(n,gamma)'` | 辐射俘获次数 | 次 |
+| `'heating'` | 这个核素留在这一格里的能量（KERMA，讲义 §7） | eV |
+
+**④ 一个 filter 对象给好几个 tally 用**
+```python
+f = openmc.EnergyFilter([0.5, 7.9, 64.0])
+t1.filters = [f]
+t2.filters = [f]       # 同一个 f
+```
+
+**⑤ 字典套字典**
+```python
+book = {}
+book["Lin"] = {"math": 87, "art": 92}
+print(book["Lin"]["art"])        # 92 —— 先取人，再取科目
+```
+`json.dump` 存、`json.load` 读回来都还是两层。
+
+**⑥ 空的 tally 容器，往里加**
+```python
+ts = openmc.Tallies()     # 空的容器（有 s）
+t1 = openmc.Tally(name="x")   # 一个 tally（没有 s）
+ts.append(t1)
+```
+
