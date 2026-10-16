@@ -241,3 +241,63 @@ t1 = openmc.Tally(name="x")   # 一个 tally（没有 s）
 ts.append(t1)
 ```
 
+
+## 12. （10/16 补）判据 3、5 要用的新用法（规则 13，例子都和项目无关）
+
+**① 带默认值的参数**（`run(…, seed=1)`）
+```python
+def brew(cups, sugar=2):        # sugar 不传就是 2
+    print(cups, "杯，糖", sugar)
+brew(3)            # 3 杯，糖 2
+brew(3, sugar=5)   # 3 杯，糖 5
+```
+有默认值的参数放在没默认值的**后面**。好处：旧的调用一个字不用改。
+
+**② 按名字传参之后，后面全得按名字传**（10/16 `run(…, n_bat=10000, mat)` 报错）
+```python
+def brew(cups, sugar=2, milk=False): ...
+brew(3, sugar=5, True)        # ✗ SyntaxError: positional argument follows keyword argument
+brew(3, sugar=5, milk=True)   # ✓
+brew(3, 5, True)              # ✓ 全按位置，顺序和定义一致
+```
+`mat=mat`：左边是**函数定义里的参数名**，右边是**你手里的变量**，正好同名而已。
+
+**③ 字符串拼起来当字典的键**（`my_run` 里 前缀 + `"_sum"`）
+```python
+stock = {"apple_price": 3.7, "apple_count": 12}
+fruit = "apple"
+print(stock[fruit + "_price"])    # 3.7
+```
+这是拼**键名**；拼**路径**照旧用 `os.path.join`。
+
+**④ 返回三个值只要两个：`_` 占位**
+```python
+def stats():
+    return 5, 9, 2
+lo, _, hi = stats()      # 中间那个不要
+```
+
+**⑤ `json.load` vs `json.dump`**
+| | 方向 |
+|---|---|
+| `json.dump(字典, f)` | 字典 → 写进文件（`open(…, "w")`） |
+| `json.load(f)` | 文件里的文字 → 变回字典（`open(…, "r")`） |
+
+**⑥ `%` 格式化：宽度对齐表格**（`mcstat.row()` 就是这么写的）
+| 写法 | 意思 |
+|---|---|
+| `%-16s` | 字符串占 16 格，左对齐 |
+| `%8s` / `%8d` | 字符串 / 整数占 8 格，右对齐 |
+| `%8.2f` | 小数占 8 格，保留 2 位 |
+⚠️ `.2` 写在 `s` 上（`%-8.2s`）是「字符串只留前 2 个字符」—— 10/16 表头 `max_z` 变成了 `ma`。
+
+**⑦ OpenMC：种子、热散射表**
+```python
+st.seed = 2                                  # Settings 的属性；不设 = 1
+moder.add_s_alpha_beta("c_Graphite")         # 给材料加热散射表；名字和 cross_sections.xml 里 materials="…" 一字不差
+```
+本项目用的是 `"c_H_in_H2O"`（水里束缚的氢；⚠️ 是字母 O，10/16 写成数字 0 过）。只作用于材料里的 H1。
+
+**⑧ 两次独立运行合并**（`merge_two`）
+均值 = (m₁ + m₂)/2；SE = √(SE₁² + SE₂²) / 2。
+来历：Var(X/2) = Var(X)/4；X、Y 独立 → Var(X+Y) = Var X + Var Y。两份 SE 差不多时 SE合 ≈ SE/√2（= 一次跑两倍历史数）。
