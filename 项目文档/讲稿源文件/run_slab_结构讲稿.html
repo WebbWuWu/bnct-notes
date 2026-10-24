@@ -45,13 +45,13 @@
 <body>
 
 <h1>BNCT 中子输运程序 · <code style="font-size:16pt;background:none;padding:0">run_slab</code> 结构讲稿</h1>
-<div class="sub">文件 <code>my_code\lesson07_freegas.py</code> · 2026-10-23 拆分后的版本（行号以 10/23 18:10 那一版为准，加 kerma 以后会往下移）· 用途：每天读一遍，面试时能从头讲到尾</div>
+<div class="sub">文件 <code>my_code\lesson07_freegas.py</code> · 2026-10-24 版：拆分 + M2 的 kerma 记账、γ 计数、30 层之和 + fgk 精简版（行号以 10/24 17:05 那一版为准，803 行）· 用途：每天读一遍，面试时能从头讲到尾</div>
 
 <div class="box oral avoid">
 <p><b>两分钟口述版（先背这段）</b></p>
-<p>我的程序模拟的是：一块 15 cm 厚、分成 30 层的平板模体（M1 是软组织，M2 起是水加 15 ppm 的 <sup>10</sup>B），京都大学 KUR 的 BNCT 束流从表面垂直射入。我用连续能量的 ENDF/B-VIII.0 截面库，一个中子一个中子地跟踪，从出生跟到它漏出、被吸收或被轮盘赌杀掉，统计每一层的通量、硼剂量、氢反冲剂量和 (n,γ) 反应数。</p>
+<p>我的程序模拟的是：一块 15 cm 厚、分成 30 层的平板模体（M1 是软组织，M2 起是水加 15 ppm 的 <sup>10</sup>B），京都大学 KUR 的 BNCT 束流从表面垂直射入。我用连续能量的 ENDF/B-VIII.0 截面库，一个中子一个中子地跟踪，从出生跟到它漏出、被吸收或被轮盘赌杀掉，统计每一层的通量、硼剂量、氢反冲剂量和 (n,γ) 反应数。M2 起，剂量按核素用「径迹长度 × MT=301 加热截面」（kerma）来记，另外数出两种 γ 光子各产生了多少个。</p>
 <p>主函数 <code>run_slab</code> 只负责调度，具体工作交给 8 个小函数：开工前查一次核素下标、开一本总账；每条历史先从源出生；每一步先在当前能量查截面，再飞一段并按层记径迹，然后判断有没有漏出，没漏出就撞一下（隐式俘获加自由气体散射）；历史结束时入账，最后对三条总账、交出结果。</p>
-<p>拆分时我先用原程序存了 5 组基准，每拆一块都用同一个种子重跑，28 个结果必须逐位相同，并且故意把两个随机数的顺序对调过一次，确认这个检查会报错。</p>
+<p>拆分时我先用原程序存了 5 组基准，每拆一块都用同一个种子重跑，28 个结果必须逐位相同，并且故意把两个随机数的顺序对调过一次，确认这个检查会报错。后来加 kerma，老的 28 个键照样逐位相同；新加的 10 个键由另一组判据 K0–K5 守着，它们抓到过我自己写的两个真错。</p>
 </div>
 
 <h2>1 · 程序在算什么</h2>
@@ -62,7 +62,7 @@
   <tr><td>源</td><td>KUR 临床束流三群：热 3.72% / 超热 90.46% / 快 5.82%；超热段按 1/E 分 8 箱；热群下限 0.01 eV，快群上限 2 MeV</td></tr>
   <tr><td>截面</td><td>LANL lib80x（ENDF/B-VIII.0）HDF5，线性插值；低于表下限按 1/v 外推</td></tr>
   <tr><td>物理</td><td>自由气体热运动（有上散射）；质心系各向同性弹性散射；隐式俘获 + 轮盘赌</td></tr>
-  <tr><td>输出</td><td>每层的通量（径迹长度）、D<sub>B</sub>（逐道 Q 值 / 常数 Q 对照）、D<sub>N</sub>、(n,γ) 反应数、D<sub>H</sub>（碰撞估计器，总的 + 按核素），每样都有 sum 和平方和 → 均值和标准误</td></tr>
+  <tr><td>输出</td><td>每层的通量（径迹长度）、D<sub>B</sub>（逐道 Q 值 / 常数 Q 对照）、D<sub>N</sub>、(n,γ) 反应数、D<sub>H</sub>（碰撞估计器，总的 + 按核素），每样都有 sum 和平方和 → 均值和标准误<br><b>M2 新加</b>：按核素的 kerma（径迹 × N<sub>i</sub>·H<sub>i</sub>(E)，H = MT=301）· 两种 γ 的个数（H(n,γ) 2.2233 MeV、B10 的 801 支 0.4778 MeV，只数不跑）· 通量和三个核素 kerma 的「30 层之和」（判据 3 方案丙）</td></tr>
 </table>
 
 <div class="avoid"><h2>2 · 调用顺序和数据怎么流</h2>
@@ -79,7 +79,7 @@
  │       z &lt; 0 → 反射；z &gt; d → 透射；被截断 → 停     （记进 tal，这条历史结束）
  │       collide(p, xs, hist, tal, ...)       撞一下；返回 False = 吸收 / 被杀
  │    end_history(tal, hist, ...)             小账本入总账（sum 和 sq）
- └─ return finish(tal, N, dz)                 对三条总账，交出 28 个键</div></div>
+ └─ return finish(tal, N, dz)                 对三条总账，交出 38 个键</div></div>
 <p><span class="tag">p</span>粒子状态：<code>z u v w E wt t</code>（在哪、往哪飞、多少能量、多少权重、飞了多久）&nbsp;
 <span class="tag">hist</span>这条历史的计数，每条历史开头清零&nbsp;
 <span class="tag">tal</span>整个模拟的计数&nbsp;
@@ -89,41 +89,42 @@
 <h2>3 · 八个函数逐个讲</h2>
 
 <div class="avoid">
-<h3><span class="num">①</span><code>prepare_nuclides(nuclides)</code> <span class="where">第 205 行</span></h3>
+<h3><span class="num">①</span><code>prepare_nuclides(nuclides)</code> <span class="where">第 190 行</span></h3>
 <p><b>开工前查一次下标。</b>算剂量要用几个特定的反应道：B10 的 800、801（(n,α) 到 <sup>7</sup>Li 基态 / 激发态两支）、N14 的 600（(n,p)），以及每个核素的 102（(n,γ)）。这个函数先查出「B10 是第几个核素、它的 801 是第几个道、Q 值多少」，装进字典 <code>idx</code>。之后每一步直接拿下标用，不用每步都去列表里找一遍。</p>
 <div class="kv"><span class="k">交出</span><span><code>idx</code>：9 个键，材料里没有的核素记 <code>None</code>（M2 的水里没有 N14）</span></div>
 </div>
 
 <div class="avoid">
-<h3><span class="num">②</span><code>make_tallies(nuclides, NL)</code> <span class="where">第 240 行</span></h3>
+<h3><span class="num">②</span><code>make_tallies(nuclides, NL)</code> <span class="where">第 228 行</span></h3>
 <p><b>开一本整个模拟的账本 <code>tal</code>。</b>里面记三类东西：</p>
 <ul>
   <li><b>结局计数</b>：透射 <code>n_T</code>、反射 <code>n_R</code>、真吸收 <code>n_A</code>、轮盘赌杀掉 <code>n_ki</code>、时间截断 <code>nt_cut</code>、走满步数 <code>n_sd</code> / <code>n_stuck</code>；碰撞总数 <code>n_i</code>；透射、反射的权重和</li>
   <li><b>逐层的 sum 和 sq</b>：通量、D<sub>B</sub>（<code>Br</code> 逐道 Q、<code>Bc</code> 常数 Q）、D<sub>N</sub>、(n,γ)、D<sub>H</sub>（总的 + 按核素的 <code>sigma_x</code>）</li>
   <li><b>「验证 B」总账</b>：每条历史「∫Σ<sub>t</sub> dl − 实际碰撞次数」的和与平方和</li>
+  <li><span class="tag">M2</span><b>逐层</b>：按核素名的 <code>kerma_sum</code> / <code>kerma_sq</code>，两条 γ <code>gH_*</code>、<code>gB_*</code>；<b>不分层</b>（每个只有一个数）：<code>track_tot_*</code>，按核素名的 <code>kerma_tot_*</code></li>
 </ul>
 <p>为什么每样都记 sum 和 sq：<b>每条历史是一个独立样本</b>。有了 Σx 和 Σx<sup>2</sup>，就能算出均值 x̄ 和标准误 SE = √(σ<sub>1</sub><sup>2</sup>/N)（第 4 课）。</p>
 </div>
 
 <div class="avoid">
-<h3><span class="num">③</span><code>start_history(...)</code> <span class="where">第 394 行</span></h3>
+<h3><span class="num">③</span><code>start_history(...)</code> <span class="where">第 416 行</span></h3>
 <p><b>一个中子出生。</b>位置 z<sub>src</sub>，方向 (0, 0, 1)，权重 1，时间 0。能量有两种取法：单能；或者从 KUR 源表里抽，先按份额抽一个能箱，再在箱内按 ln E 均匀抽（<code>sample_E_table</code>）。同时给这条历史开一本自己的小账本 <code>hist</code>，<b>每条历史开头清零</b>（变量放在它所数的那一层）。</p>
 <div class="kv"><span class="k">交出</span><span><code>p</code>（粒子状态）、<code>hist</code>（这条历史的计数）</span></div>
 </div>
 
 <div class="avoid">
-<h3><span class="num">④</span><code>lookup_xs(nuclides, idx, E)</code> <span class="where">第 424 行</span></h3>
+<h3><span class="num">④</span><code>lookup_xs(nuclides, idx, E)</code> <span class="where">第 451 行</span></h3>
 <p><b>在当前能量查表。</b>中子飞行中能量不变，所以每一步只查一次。</p>
 <ul>
   <li>每个核素每个道的<b>微观截面</b> σ（单位 b，一个核）：线性插值，低于表下限 E[0] = 1e-5 eV 时按 1/v 外推（<code>sigma_at_ext</code>）</li>
   <li><b>宏观截面</b> Σ<sub>j</sub> = N<sub>j</sub>·σ<sub>tot,j</sub>（单位 /cm，每走 1 cm 撞这个核素的概率）和总截面 Σ<sub>t</sub> = ΣΣ<sub>j</sub></li>
   <li>「每走 1 cm 记多少」的系数：硼 <code>B_reac</code> = N<sub>B</sub>(σ<sub>800</sub>Q<sub>800</sub> + σ<sub>801</sub>Q<sub>801</sub>)，氮 <code>N_coe</code>，(n,γ) <code>a_coe</code> = Σ N<sub>j</sub>σ<sub>102,j</sub></li>
 </ul>
-<p><span class="tag">M2</span>kerma 系数 N<sub>i</sub>·H<sub>i</sub>(E)（H = MT=301）就加在这里。</p>
+<p><span class="tag">M2</span><b>kerma 系数</b> <code>kerco</code>：按核素名的字典，值 = N<sub>i</sub>·BARN·H<sub>i</sub>(E)（eV/cm；H = MT=301，用 <code>sigma_at_ext</code> 当成只有一个道来查）。<b>γ 系数</b>：<code>gH_coe</code> = N<sub>H</sub>σ<sub>102</sub>(H1)、<code>gB_coe</code> = N<sub>B</sub>σ<sub>801</sub>（/cm，乘路程 = 期望发生几次）。</p>
 </div>
 
 <div class="avoid">
-<h3><span class="num">⑤</span><code>fly(p, xs, hist, rng, d, dz, NL, t_cut)</code> <span class="where">第 458 行</span></h3>
+<h3><span class="num">⑤</span><code>fly(p, xs, hist, rng, d, dz, NL, t_cut)</code> <span class="where">第 496 行</span></h3>
 <p><b>飞一段。</b></p>
 <ul>
   <li>抽飞行距离 s = −ln(1−ξ)/Σ<sub>t</sub>。写 1−ξ：<code>random()</code> 在 [0,1) 里，ξ 能取到 0 而 1−ξ 永远大于 0，取对数不会炸</li>
@@ -132,7 +133,7 @@
   <li>核对：各层路程之和 = 整段路程（assert）；累计 Σ<sub>t</sub>×路程，给「验证 B」用</li>
 </ul>
 <div class="kv"><span class="k">改</span><span><code>p</code> 的 z、t；<code>hist</code></span><span class="k">交出</span><span>这一段是不是被截断了</span></div>
-<p><span class="tag">M2</span>kerma 按核素记账加在这里 · <span class="tag">M5</span>三维只改这个函数</p>
+<p><span class="tag">M2</span>每一截路程还记 3 样：每个核素 wt × 路程 × <code>kerco[name]</code> 进 <code>kerma_h[name]</code>；wt × 路程 × <code>gH_coe</code>、<code>gB_coe</code> 进两条 γ 计数。<code>w == 0</code> 那支（路程 s、层 k0）和拆层循环（路程 dz_step/|w|、层 k）<b>两处都要记</b>；前者是 <code>check_split</code> 的盲区，只能靠读。 · <span class="tag">M5</span>三维只改这个函数</p>
 </div>
 
 <div class="avoid">
@@ -141,12 +142,12 @@
 </div>
 
 <div class="avoid">
-<h3><span class="num">⑦</span><code>collide(p, xs, hist, tal, nuclides, order, rng, implicit, dz)</code> <span class="where">第 569 行</span></h3>
+<h3><span class="num">⑦</span><code>collide(p, xs, hist, tal, nuclides, order, rng, implicit, dz)</code> <span class="where">第 621 行</span></h3>
 <p><b>撞一下。</b>撞哪个核素按<b>宏观截面</b>的占比抽（Σ<sub>j</sub>，不是按数密度 N）。</p>
 <ul>
   <li><b>模拟模式</b>：核素按 Σ<sub>j</sub>/Σ<sub>t</sub> 抽；再按各道截面占比抽反应道（<code>sample_reaction</code>，道按 0.0253 eV 截面从大到小排，平均 1 次左右就抽中）。散射就继续；吸收就结束</li>
   <li><b>隐式俘获模式</b>：不真吸收，权重乘「不被吸收的概率」Σ<sub>s</sub>/Σ<sub>t</sub>，一定散射，核素按散射截面份额抽。权重 &lt; 0.1 时轮盘赌：以 wt/0.2 的概率活下来、权重提到 0.2，否则杀掉。活下来的期望权重 = (wt/0.2)×0.2 = wt，<b>无偏</b>，又不用一直跟着权重很小的中子</li>
-  <li><b>散射 = 自由气体</b>：先抽靶核的热运动（<code>sample_target</code>，舍选法），再在质心系各向同性散射、变回实验室系（<code>free_gas_kinematics</code>）→ 新能量和方向。热中子能被「踢」得更快（上散射），靠的就是这一步</li>
+  <li><b>散射 = 自由气体</b>：先抽靶核的热运动（<code>sample_target</code>，舍选法），再在质心系各向同性散射、变回实验室系（<code>free_gas_kinematics</code>，10/24 换成精简版：三个分量装进长度 3 的列表 + <code>dot</code>、<code>norm</code>，逐位不变）→ 新能量和方向。热中子能被「踢」得更快（上散射），靠的就是这一步</li>
   <li><b>D<sub>H</sub> 碰撞估计器</b>：wt × (散射前能量 − 散射后能量) 记在碰撞所在那一层，总的一份、按核素一份</li>
 </ul>
 <div class="kv"><span class="k">改</span><span><code>p</code> 的 E、u、v、w、wt；<code>hist</code>；<code>tal</code></span><span class="k">交出</span><span>还活着没有（False = 吸收或被杀）</span></div>
@@ -154,19 +155,20 @@
 </div>
 
 <div class="avoid">
-<h3><span class="num">⑧</span><code>end_history(tal, hist, nuclides, NL)</code> <span class="where">第 650 行</span></h3>
+<h3><span class="num">⑧</span><code>end_history(tal, hist, nuclides, NL)</code> <span class="where">第 702 行</span></h3>
 <p><b>一条历史结束，入账。</b>小账本每一层加进总账的 sum，平方加进 sq。「验证 B」：这条历史的 ∫Σ<sub>t</sub> dl − 碰撞次数，期望为 0，也入账。</p>
+<p><span class="tag">M2</span>kerma（按核素）和两条 γ 逐层入账；另外每条历史<b>先把 30 层加起来，再平方</b>，记进 <code>track_tot_*</code>、<code>kerma_tot_*</code>。先加后平方，交叉项 2x<sub>j</sub>x<sub>k</sub> 里装的就是层与层一起涨落的那部分 —— 所以总量的 SE 不能拿 30 层的 SE 合成。</p>
 </div>
 
 <div class="avoid">
-<h3><span class="num">⑨</span><code>finish(tal, N, dz)</code> <span class="where">第 305 行</span></h3>
+<h3><span class="num">⑨</span><code>finish(tal, N, dz)</code> <span class="where">第 317 行</span></h3>
 <p><b>收尾，对总账。</b>三条总账必须对上：</p>
 <ul>
   <li>「验证 B」总账闭合（飞行距离抽样和碰撞计数是一致的）</li>
   <li>各种结局条数之和 = N（一条历史不漏、不重复）</li>
   <li>截断时刻记下的能量条数 = 被截断的历史数</li>
 </ul>
-<p>然后拼出 28 个键的返回字典，这是 <code>run_slab</code> 对外的「说明书」。<code>lesson08_dose</code>、<code>lesson09_*</code> 都靠这些键名。</p>
+<p>然后拼出 38 个键的返回字典（10/23 的 28 个 + M2 的 10 个），这是 <code>run_slab</code> 对外的「说明书」。<code>lesson08_dose</code>、<code>lesson09_*</code> 都靠这些键名。</p>
 </div>
 
 <div class="avoid"><h2>4 · 怎么知道它是对的</h2>
@@ -174,6 +176,7 @@
   <tr><th style="width:30mm">检查</th><th>两条路</th><th>抓什么</th></tr>
   <tr><td>拆分逐位回归<br><code>check_split.py</code></td><td>拆之前的 <code>run_slab</code>（存成基准）vs 拆之后的；同一个种子、5 组输入（3 个假库 + 2 个真库）</td><td>随机数调用顺序变了、计数漏加、层号错、返回值少一项。故意改坏 5 处，抓到 4 处；盲区是 w = 0 那个分支（原样照搬）</td></tr>
   <tr><td>程序里的总账</td><td>结局计数之和 vs N；∫Σ<sub>t</sub> dl vs 碰撞次数</td><td>某种结局没计数、飞行距离抽样错</td></tr>
+  <tr><td>kerma 判据<br><code>check_kerma.py</code><br>K0–K5</td><td>K1 H1：径迹 × MT=301（扣氘核反冲）vs 碰撞估计器 · K2 B10：MT=301 vs 逐道 Q 值 · K3 γ 个数 vs (n,γ)、(n,α) 计数 · K5 总量 vs 30 层之和</td><td>heat 接错核素、少乘数密度、漏记一处、γ 用错道、核素名错位。10/24 抓到两个真错：<code>gB</code> 复制后没改全（K3②）、<code>name</code> 先用后赋值（K5）</td></tr>
   <tr><td>里程碑 1（10/18）</td><td>我的程序 vs OpenMC 0.15.3，同一块组织、同一个束流，30 层逐层比 z</td><td>两边物理不一致；通量、D<sub>B</sub>、D<sub>N</sub>、(n,γ) 全过；D<sub>H</sub> 深处偏低 → 怀疑近似 #4，10/25 用方案乙查</td></tr>
 </table></div>
 
@@ -187,6 +190,8 @@
   <tr><td class="q">为什么要自由气体？</td><td>热中子能量和靶核热运动（kT ≈ 0.025 eV）同量级，靶核不能当静止的，否则没有上散射、热谱会错。代价是只有自由原子、没有化学束缚（缺 S(α,β)，M3 补）</td></tr>
   <tr><td class="q">为什么每样都记 sum 和平方和？</td><td>每条历史是一个独立样本：均值 = Σx/N，单条方差 σ<sub>1</sub><sup>2</sup> = Σx<sup>2</sup>/N − x̄<sup>2</sup>（乘 N/(N−1)），SE = √(σ<sub>1</sub><sup>2</sup>/N)</td></tr>
   <tr><td class="q">截面低于表下限怎么办？</td><td>按 1/v 外推：σ(E) = σ(E[0])·√(E[0]/E)。吸收截面低能区本来就是 1/v</td></tr>
+  <tr><td class="q">kerma 为什么能当剂量？</td><td>kerma 记的是「交给带电粒子多少动能」。中子打出来的带电粒子（α、<sup>7</sup>Li、反冲质子）射程 μm 到 mm，远小于 0.5 cm 的层，能量就留在原地（带电粒子平衡），所以 kerma ≈ 剂量。光子打出的康普顿电子射程约 0.6 cm，和层一样大，表面会高估（M4 的事）</td></tr>
+  <tr><td class="q">「30 层之和」为什么单独记？</td><td>30 层是一起涨落的（快中子多抽到几个，各层一起偏高，ρ̄ ≈ 0.3）。总量的方差 = 各层方差之和 + 所有层间协方差，只记逐层的 sq 算不出协方差；每条历史先加后平方，协方差就自动算进去了</td></tr>
   <tr><td class="q">为什么拆成小函数？</td><td>M2–M5 要加 kerma、S(α,β)、光子、三维，都改在历史循环里；拆开以后改哪一块一目了然（kerma → <code>lookup_xs</code>/<code>fly</code>，S(α,β) → <code>collide</code>，三维 → <code>fly</code>），以后上 GPU 时 <code>fly</code> / <code>collide</code> 也正好对应两个核函数</td></tr>
 </table>
 
@@ -196,14 +201,14 @@
   <tr><td><code>prepare_nuclides</code></td><td>开工前查一次 B10 / N14 / 102 的下标和 Q 值 → <code>idx</code></td></tr>
   <tr><td><code>make_tallies</code></td><td>开总账本 <code>tal</code>：结局计数 + 逐层 sum / sq + 验证 B</td></tr>
   <tr><td><code>start_history</code></td><td>中子从源出生（KUR 表抽能量），小账本 <code>hist</code> 清零</td></tr>
-  <tr><td><code>lookup_xs</code></td><td>在当前能量查 σ、Σ、Σ<sub>t</sub> 和「每 cm 记多少」的系数</td></tr>
-  <tr><td><code>fly</code></td><td>抽 s = −ln(1−ξ)/Σ<sub>t</sub>，按层拆开记径迹，更新 z</td></tr>
+  <tr><td><code>lookup_xs</code></td><td>在当前能量查 σ、Σ、Σ<sub>t</sub> 和「每 cm 记多少」的系数（+ kerma 系数、两个 γ 系数）</td></tr>
+  <tr><td><code>fly</code></td><td>抽 s = −ln(1−ξ)/Σ<sub>t</sub>，按层拆开记径迹、kerma、γ，更新 z</td></tr>
   <tr><td>判结局</td><td>z &lt; 0 反射、z &gt; d 透射、截断 → 历史结束</td></tr>
   <tr><td><code>collide</code></td><td>按 Σ 抽核素；模拟抽道 / 隐式减权重 + 轮盘赌；自由气体散射；记 D<sub>H</sub></td></tr>
-  <tr><td><code>end_history</code></td><td>小账本加进 sum，平方加进 sq</td></tr>
-  <tr><td><code>finish</code></td><td>对三条总账，交出 28 个键</td></tr>
+  <tr><td><code>end_history</code></td><td>小账本加进 sum，平方加进 sq；30 层之和先加后平方</td></tr>
+  <tr><td><code>finish</code></td><td>对三条总账，交出 38 个键</td></tr>
 </table></div>
 
-<div class="foot">讲稿 Claude 写（2026-10-23），程序本体代码行用户写；10/23 的拆分：拆法（乙）和框架三问由用户定；<code>prepare_nuclides</code> 用户拆，其余函数由 Claude 搬运（算法不变），每一步逐位回归 5 个情况全部相同。</div>
+<div class="foot">讲稿 Claude 写（2026-10-23），程序本体代码行用户写；10/23 的拆分：拆法（乙）和框架三问由用户定；<code>prepare_nuclides</code> 用户拆，其余函数由 Claude 搬运（算法不变），每一步逐位回归 5 个情况全部相同。10/24：kerma 第 5、6 步、30 层之和由用户写；fgk 精简版由 Claude 换入（用户要求，逐位回归）；讲稿同步。</div>
 </body>
 </html>
