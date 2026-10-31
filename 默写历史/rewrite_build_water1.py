@@ -67,7 +67,7 @@ def build_water(E_keep):
                 mts1.append(mts[i])
                 XS1.append(XS[i])
                 Q1.append(Q[i])
-        dens=frac[nuc]*rho_w*N_A/awr/M_N
+        dens=frac[nuc]*rho_w*N_A/awr[nuc]/M_N
         kT=load_kT(nuc,T)
         dirc={
             "E":E,
