@@ -83,7 +83,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from lesson08_dose import MASS_FRAC, RHO, D, kur_table, NL
 import openmc
 # ============================ 你从这里往下写 ============================
-openmc.config['cross_sections']="/mnt/e/BNCT_GPU/lib80x_hdf5/cross_section.xml"
+openmc.config['cross_sections']="/mnt/e/BNCT_GPU/lib80x_hdf5/cross_sections.xml"
 
 def mater():
     soft=openmc.Material(name='soft tissue')
@@ -143,7 +143,7 @@ def run(E_dis,tal,inp,batch,n_bat,mat,seed=1):
     st=openmc.Settings()
     st.run_mode='fixed source'
     st.particles=n_bat
-    st.batched=batch
+    st.batches=batch
     st.seed=seed
     st.source=S
     path2=os.path.join(inp,'materials.xml')
