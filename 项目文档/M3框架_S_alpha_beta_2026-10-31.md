@@ -3,7 +3,7 @@
 > 🔴 只写「每一步做什么」，**不是代码**（9/27 纪律）。名字 Claude 起（10/30 定）；放哪个文件你定。
 > 物理和算法细节见 `原理讲义_第12课_S_alpha_beta.md` §5（10/31 晚，依据 OpenMC 0.15.3 `src/secondary_thermal.cpp` 第 209–332 行、`src/math_functions.cpp` 第 763–792 行）。
 
-## 定下的 9 条
+## 定下的 10 条
 
 | 轮 | # | 定了什么 |
 |---|---|---|
@@ -16,6 +16,7 @@
 | | ⑦ | 旋转函数**φ 外面抽好传进去**（乙）：纯函数，不传 `rng` |
 | | ⑧ | 判据 T1–T5（下表）+ 里程碑整体对拍（判据 3 丙，交付核对，不占 5 条） |
 | | ⑨ | 上散射时 `D_H += wt × (E_be − E)` 出现负数：**照记**（甲） |
+| 三（11/4） | ⑩ | 弹性散射真实角分布（H1、O16，MT=2）：新函数 `sample_elastic_mu(ang, E, rng)` 按实验室入射能 E 随机选表、二次反解抽 **μ_cm**；换到实验室系选**甲** —— `free_gas_kinematics` 加参数 `mu_cm=None`，只改第 5 步「q 怎么抽」（`None` 照旧各向同性；否则质心系里原方向 vc/s 用 `rotate_dir` 转 μ_cm、φ = 2πξ），加回质心速度不动；μ_cm 在 `collide` 里 `sample_target` 之后抽。依据 OpenMC `physics.cpp` `elastic_scatter`。用法：`项目文档\sample_elastic_mu用法_2026-11-04.md` |
 
 ## 三个新函数
 
