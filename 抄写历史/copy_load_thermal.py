@@ -24,7 +24,7 @@ def load_thermal(sab_path,T_tag):
         thermal["E_max"]=float(root.attrs["energy_max"])
         xs=root[T_tag]["inelastic/xs"][:]
         thermal["xs_E"]=xs[0,:]
-        thermal["xs_sig"]=xs[1:]
+        thermal["xs_sig"]=xs[1,:]
         dist=root[T_tag]["inelastic/distribution"]
         thermal["E_in"]=dist["energy"][:]
         eout=dist["energy_out"][:]

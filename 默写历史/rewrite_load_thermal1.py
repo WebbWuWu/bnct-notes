@@ -22,3 +22,37 @@
 #    · 表号当行号（10/31 eout[j0, …]）
 # ============================================================
 # ============================ 你从这里往下写 ============================
+import h5py,numpy as np
+N_MU=30
+def load_thermal(sab_path,T_tag):
+    thermal={}
+    with h5py.File(sab_path,"r")as f:
+        root=f["c_H_in_H2O"]
+        thermal["E_max"]=float(root.attrs["energy_max"])
+        xs=root[T_tag]["xs"][:]
+        thermal["xs_E"]=xs[0,:]
+        thermal["xs_sig"]=xs[1,:]
+        dist=root[T_tag]["inelastic/distribution"]
+        thermal["E_in"]=dist["energy"][:]
+        eout=dist["energy_out"][:]
+        offs=dist["energy_out"].attrs["offsets"]
+        mu_all=dist["mu"][:]
+        n_out=np.diff(np.append(offs,eout.shape[1]))
+        thermal["tables"]=[]
+        for l in range(len(offs)):
+            beg=offs[l]
+            end=beg+n_out[l]
+            E_out,pdf,cdf=eout[0:3,beg:end]
+            mu_beg=eout[4,beg:end].type(int)
+            mu_rows=[]
+            for k in range(len(mu_beg)):
+                mu_rows.append(mu_all[0,mu_beg[k]:mu_beg[k]+N_MU])
+            mu_tab=np.array(mu_rows)
+            dic={
+                "E_out":eout,
+                "pdf":pdf,
+                "cdf":cdf,
+                "mu":mu_tab
+            }
+            thermal["tables"].append(dic)
+    return thermal

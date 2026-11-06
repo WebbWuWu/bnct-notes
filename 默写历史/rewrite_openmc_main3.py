@@ -27,6 +27,42 @@
 #    · statepoint 文件名里的批数从哪来（又一次「算好的变量没用上」）
 #    · 打开文件用 with，取东西要在 with 里面
 # ============================================================
-import os, sys
+import os, sys,openmc
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "my_code"))
 # ============================ 你从这里往下写 ============================
+def run(E_dis,tal,inp,batch,n_bat,mat,seed=1):
+    os.makedirs(inp,exist_ok=True)
+    material=openmc.Materials([mat])
+    geo=geom(mat)
+    pos=openmc.stats.Point((0,0,1e-6))
+    dirn=openmc.stats.Monodirectional((0,0,1))
+    S=openmc.IndependentSource(space=pos,angle=dirn,energy=E_dis)
+    st=openmc.Settings()
+    st.run_mode='fixed source'
+    st.particles=n_bat
+    st.batches=batch
+    st.seed=seed
+    st.source=S
+    path2=os.path.join(inp,"materials.xml")
+    path3=os.path.join(inp,"geometry.xml")
+    path4=os.path.join(inp,"settings.xml")
+    path5=os.path.join(inp,"tallies.xml")
+    material.export_to_xml(path2)
+    geo.export_to_xml(path3)
+    st.export_to_xml(path4)
+    tal.export_to_xml(path5)
+    openmc.run(cwd=inp)
+    path6=os.path.join(inp,"statepoint."+str(batch)+".h5")
+    return path6
+
+def tallies(path,names1):
+    with openmc.StatePoint(path)as sp:
+        t2=sp.get_tally(name=names1)
+        m=t2.mean
+        s=t2.std_dev
+        m1=m.flatten()
+        m2=m1.tolist()
+        s1=s.flatten()
+        s2=s1.tolist()
+    return m2,s2
+        
